@@ -16,16 +16,12 @@ const pool = new Pool({
  * @return {Promise<{}>} A promise to the user.
  */
 const getUserWithEmail = function(email) {
-  let user;
-  for (const userId in users) {
-    user = users[userId];
-    if (user.email.toLowerCase() === email.toLowerCase()) {
-      break;
-    } else {
-      user = null;
-    }
-  }
-  return Promise.resolve(user);
+  return pool.query(`
+  SELECT * FROM users
+  WHERE email = $1`, [email])
+  .then (res => {
+    return res.rows[0];
+  })
 }
 exports.getUserWithEmail = getUserWithEmail;
 
@@ -35,7 +31,12 @@ exports.getUserWithEmail = getUserWithEmail;
  * @return {Promise<{}>} A promise to the user.
  */
 const getUserWithId = function(id) {
-  return Promise.resolve(users[id]);
+  return pool.query(`
+  SELECT * FROM users
+  WHERE id = $1`, [id])
+  .then (res => {
+    return res.rows[0];
+  });
 }
 exports.getUserWithId = getUserWithId;
 
@@ -49,7 +50,14 @@ const addUser =  function(user) {
   const userId = Object.keys(users).length + 1;
   user.id = userId;
   users[userId] = user;
-  return Promise.resolve(user);
+  return pool.query(`
+  INSERT INTO users(name, email, password)
+  VALUES ($1, $2, $3)
+  RETURNING *;
+  `, [user.name, user.email, user.password])
+  .then(res => {
+    return res.rows[0]
+  })
 }
 exports.addUser = addUser;
 
@@ -61,7 +69,18 @@ exports.addUser = addUser;
  * @return {Promise<[{}]>} A promise to the reservations.
  */
 const getAllReservations = function(guest_id, limit = 10) {
-  return getAllProperties(null, 2);
+  return pool.query(`
+  SELECT reservations.*, properties.*, avg(rating) as average_rating
+  FROM reservations
+  JOIN properties on properties.id = property_id
+  JOIN property_reviews on properties.id = property_reviews.property_id
+  WHERE reservations.guest_id = $1
+  AND reservations.end_date < now()::date
+  GROUP by properties.id, reservations.id
+  ORDER BY reservations.start_date
+  LIMIT $2
+  `, [guest_id, limit])
+  .then (res => res.rows);
 }
 exports.getAllReservations = getAllReservations;
 
